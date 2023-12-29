@@ -8,10 +8,10 @@ app.get("/", (req, res) => {
 });
 
 app.get("/comms", (req, res) => {
-    res.send("<script>window.open('https://comms.hyderite.repl.co', '_self');</script>");
+  res.sendFile(__dirname + "/comms.html");
 });
 
-app.get('*', function(req, res) {
+app.get('*', function (req, res) {
   res.status(404).sendFile(__dirname + "/public/page-not-found.html");
 });
 
