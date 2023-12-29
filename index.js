@@ -8,7 +8,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/comms", (req, res) => {
-  res.sendFile(__dirname + "/comms.html");
+  res.send(<script>window.open("https://comms.hyderite.dev", "_self");</script>);
 });
 
 app.get('*', function (req, res) {
