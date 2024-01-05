@@ -16,7 +16,7 @@ app.get("/side-projects/roblox-friends-ui-recreation", (req, res) => {
 });
 
 app.get("/rblx-fuir", (req, res) => {
-  res.send('<script>window.open("/roblox-friends-ui-recreation", "_self");</script>');
+  res.send('<script>window.open("/side-projects/roblox-friends-ui-recreation", "_self");</script>');
 });
 
 app.get('*', function (req, res) {
