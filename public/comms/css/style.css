@@ -1,0 +1,82 @@
+body {
+  overflow-x: hidden;
+}
+
+#footer {
+  position: relative;
+  bottom: 0;
+}
+
+#main {
+  position: absolute;
+  margin-top: 100px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-flow: row wrap;
+  width: 100vw;
+  height: 100vh;
+}
+
+@media all and (max-width: 480px) {
+  .title {
+    font-size: 60px !important;
+  }
+
+  .comm-title {
+    font-size: 80px !important;
+  }
+
+  .card-bottom {
+    margin-top: 90px !important;
+  }
+
+  .currency {
+    margin-top: 35px !important;
+  }
+
+  .other-card {
+    margin-left: 10px !important;
+  }
+
+  .portfolio-example {
+    width: 300px !important;
+    height: 145px !important;
+  }
+
+  .others-title {
+    font-size: 55px !important;
+  }
+}
+
+@media all and (max-width: 1448px) {
+  #main {
+    margin-top: 160px !important;
+  }
+}
+
+@media all and (min-width: 717px) {
+  #footer {
+    position: absolute;
+    transform: translateY(228px);
+  }
+}
+
+.comms-left {
+  float: left;
+  flex-flow: column;
+}
+
+.comms-right {
+  float: right;
+  flex-flow: column;
+}
+
+#pay-btn:hover {
+  color: #00457C;
+  background-color: #fff !important;
+}
+
+#paypal {
+  transition: fill .35s;
+}

@@ -1,0 +1,17 @@
+@media all and (max-width: 1460px) {
+  #footer {
+    margin-bottom: -350px !important;
+  }
+}
+
+@media all and (max-width: 930px) {
+  #footer {
+    margin-bottom: -900px !important;
+  }
+}
+
+@media all and (max-width: 480px) {
+  #footer {
+    margin-bottom: -135px !important;
+  }
+}

@@ -7,10 +7,6 @@ app.get("/", (req, res) => {
   res.sendFile(__dirname + "/index.html");
 });
 
-app.get("/comms", (req, res) => {
-  res.send('<script>window.open("https://comms.hyderite.dev", "_self");</script>');
-});
-
 app.get("/side-projects/roblox-friends-ui-recreation", (req, res) => {
   res.sendFile(__dirname + "/public/friends-ui/index.html");
 });
