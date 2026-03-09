@@ -32,7 +32,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            nixpacks build . --name ${{ github.event.repository.name }} --docker-flag "--network=host"
+            nixpacks build . --name ${{ github.event.repository.name }}
             
-            pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
+            /usr/bin/pm2 restart ${{ github.event.repository.name }} || /usr/bin/pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
           EOF
