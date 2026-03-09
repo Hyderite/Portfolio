@@ -19,7 +19,6 @@
 OR on pre-existing repos:
 1. **Fetch and Merge:**
    ```bash
-   # 1. Add the template as a source
    git remote add template https://github.com/Hyderite/vps-template.git
    git fetch template
    git merge template/main --allow-unrelated-histories
