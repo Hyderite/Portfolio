@@ -33,22 +33,28 @@ jobs:
 
           # Build and Restart natively on the VPS
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            # 1. Load shell environment to find pnpm/node paths
+            source ~/.bashrc || source ~/.profile || true
+            
+            # 2. Navigate to project directory
             cd /var/www/${{ github.event.repository.name }}
             
-            # 1. Route traffic through your WARP Proxy
+            # 3. Route traffic through your WARP Proxy (for IPv6-only survival)
             export http_proxy=http://127.0.0.1:4000
             export https_proxy=http://127.0.0.1:4000
             
-            # 2. Native Build (Uses your VPS pnpm & node directly)
-            # This avoids the "no route to host" Docker error on IPv6
-            pnpm install
-            pnpm run build
+            # 4. Locate pnpm binary (handles cases where it's not in the base PATH)
+            PNPM_BIN=$(which pnpm || echo "$HOME/.local/share/pnpm/pnpm")
             
-            # 3. Restart the app using PM2
-            # We delete first to ensure a clean start with the new build
+            # 5. Native Build
+            $PNPM_BIN install
+            $PNPM_BIN run build
+            
+            # 6. Restart the app using PM2
+            # Use the absolute path for PM2 just like we do for pnpm
             /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
-            /usr/bin/pm2 start "pnpm start" --name ${{ github.event.repository.name }}
+            /usr/bin/pm2 start "$PNPM_BIN start" --name ${{ github.event.repository.name }}
             
-            # 4. Save the process list for reboots
+            # 7. Save the process list for reboots
             /usr/bin/pm2 save
           EOF
