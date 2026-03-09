@@ -2,20 +2,26 @@ name: Deploy App
 on:
   push:
     branches: [ main ]
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: SSH and Update
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: "${{ secrets.SSH_HOST }}"
-          port: 22
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          proxy_host: "[${{ secrets.SSH_HOST }}]"
-          script: |
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via Native SSH (IPv6)
+        run: |
+          mkdir -p ~/.ssh
+          
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -6 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
+            
             git pull origin main
-            nixpacks build . --name ${{ github.event.repository.name }}
-            pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
+            
+            sudo nixpacks build . --name ${{ github.event.repository.name }}
+            sudo pm2 restart ${{ github.event.repository.name }} || sudo pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
+          EOF
