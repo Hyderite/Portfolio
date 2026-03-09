@@ -33,28 +33,34 @@ jobs:
 
           # Build and Restart natively on the VPS
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            # 1. Load shell environment to find pnpm/node paths
-            source ~/.bashrc || source ~/.profile || true
-            
-            # 2. Navigate to project directory
+            # Stop execution if any command fails
+            set -e
+
             cd /var/www/${{ github.event.repository.name }}
             
-            # 3. Route traffic through your WARP Proxy (for IPv6-only survival)
+            # 1. Route traffic through your WARP Proxy
             export http_proxy=http://127.0.0.1:4000
             export https_proxy=http://127.0.0.1:4000
             
-            # 4. Locate pnpm binary (handles cases where it's not in the base PATH)
-            PNPM_BIN=$(which pnpm || echo "$HOME/.local/share/pnpm/pnpm")
+            # 2. Use the exact pnpm path we found
+            PNPM_BIN="/usr/local/bin/pnpm"
             
-            # 5. Native Build
+            # 3. Native Build
+            echo "Starting pnpm install..."
             $PNPM_BIN install
+            
+            echo "Starting pnpm build..."
             $PNPM_BIN run build
             
-            # 6. Restart the app using PM2
-            # Use the absolute path for PM2 just like we do for pnpm
-            /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
+            # 4. Restart the app using PM2
+            # (We don't use set -e for delete because it fails if the app isn't already running)
+            set +e
+            /usr/bin/pm2 delete ${{ github.event.repository.name }}
+            set -e
+
+            echo "Starting app with PM2..."
             /usr/bin/pm2 start "$PNPM_BIN start" --name ${{ github.event.repository.name }}
             
-            # 7. Save the process list for reboots
+            # 5. Save the process list
             /usr/bin/pm2 save
           EOF
