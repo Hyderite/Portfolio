@@ -1,66 +1,30 @@
-name: Deploy App
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Cloudflared on Runner
-        run: |
-          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-          chmod +x cloudflared
-          sudo mv cloudflared /usr/local/bin/
-
-      - name: Deploy via Cloudflare Tunnel
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-
-          # Use Service Tokens to bypass the Cloudflare Access login screen
-          cat <<EOF > ~/.ssh/config
-          Host ${{ secrets.SSH_HOST }}
-            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_CLIENT_ID }} --service-token-secret ${{ secrets.CF_CLIENT_SECRET }}
-          EOF
-
-          # Sync the project files to the VPS
-          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
-
-          # Build and Restart natively on the VPS
+# Build and Restart natively on the VPS
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            # Stop execution if any command fails
             set -e
-
             cd /var/www/${{ github.event.repository.name }}
             
             # 1. Route traffic through your WARP Proxy
             export http_proxy=http://127.0.0.1:4000
             export https_proxy=http://127.0.0.1:4000
             
-            # 2. Use the exact pnpm path we found
-            PNPM_BIN="/usr/local/bin/pnpm"
+            # 2. Use Corepack to invoke pnpm (This bypasses the broken /usr/local/bin symlink)
+            # Corepack is built into Node and is much more stable on IPv6/VPS setups
+            corepack enable
             
-            # 3. Native Build
-            echo "Starting pnpm install..."
-            $PNPM_BIN install
+            echo "Starting pnpm install via Corepack..."
+            corepack pnpm install
             
             echo "Starting pnpm build..."
-            $PNPM_BIN run build
+            corepack pnpm run build
             
-            # 4. Restart the app using PM2
-            # (We don't use set -e for delete because it fails if the app isn't already running)
+            # 3. Restart the app using PM2
             set +e
             /usr/bin/pm2 delete ${{ github.event.repository.name }}
             set -e
 
             echo "Starting app with PM2..."
-            /usr/bin/pm2 start "$PNPM_BIN start" --name ${{ github.event.repository.name }}
+            # Using corepack here ensures PM2 uses the right binary
+            /usr/bin/pm2 start "corepack pnpm start" --name ${{ github.event.repository.name }}
             
-            # 5. Save the process list
             /usr/bin/pm2 save
           EOF
