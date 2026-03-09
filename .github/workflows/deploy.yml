@@ -13,6 +13,7 @@ jobs:
           port: 22
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          proxy_host: "[${{ secrets.SSH_HOST }}]"
           script: |
             cd /var/www/${{ github.event.repository.name }}
             git pull origin main
