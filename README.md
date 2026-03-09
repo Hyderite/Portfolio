@@ -15,3 +15,17 @@
    ```bash
    git clone [repo-url]
    pnpm install
+
+OR on pre-existing repos:
+1. **Fetch and Merge:**
+   ```bash
+   # 1. Add the template as a source
+   git remote add template https://github.com/Hyderite/vps-template.git
+   git fetch template
+   git merge template/main --allow-unrelated-histories
+
+2. **Commit and Push:**
+   ```bash
+   git add .
+   git commit -m "Integrated deployment template for master/main branch"
+   git push origin master/main
