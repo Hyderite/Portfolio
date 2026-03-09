@@ -1,46 +1,14 @@
-name: Deploy App
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Install Cloudflared on Runner
-        run: |
-          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-          chmod +x cloudflared
-          sudo mv cloudflared /usr/local/bin/
-
-      - name: Deploy via Cloudflare Tunnel
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-
-          # Use Service Tokens to bypass the Cloudflare Access login screen
-          cat <<EOF > ~/.ssh/config
-          Host ${{ secrets.SSH_HOST }}
-            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_CLIENT_ID }} --service-token-secret ${{ secrets.CF_CLIENT_SECRET }}
-          EOF
-
-          # Sync the project files to the VPS
-          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
-
-          # Run the build and restart commands on the VPS
+# Build and Restart
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            # Use the absolute path for Nixpacks (since WARP is now helping Docker)
+            # 1. Build the environment
             /usr/bin/nixpacks build . --name ${{ github.event.repository.name }}
             
-            # Use the absolute path for the PM2 we just moved to /usr/bin
-            /usr/bin/pm2 restart ${{ github.event.repository.name }} || /usr/bin/pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
+            # 2. Start via pnpm (using the absolute path to the fixed PM2)
+            # We use --name to match the PM2 process and -- pnpm start to run the script
+            /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
+            /usr/bin/pm2 start "pnpm start" --name ${{ github.event.repository.name }}
             
-            # Save the PM2 list so it persists after a reboot
             /usr/bin/pm2 save
           EOF
