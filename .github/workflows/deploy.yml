@@ -22,18 +22,22 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          # Define the ProxyCommand variable for reuse
+          # ProxyCommand using Service Token for Zero Trust bypass
           PROXY="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }} --id ${{ secrets.CF_CLIENT_ID }} --secret ${{ secrets.CF_CLIENT_SECRET }}"
 
-          # Run rsync
+          # Sync files to VPS
           rsync -e "ssh -o StrictHostKeyChecking=no -o ProxyCommand='$PROXY'" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
-          # Run SSH commands
+          # Build and Restart App
           ssh -o StrictHostKeyChecking=no -o ProxyCommand="$PROXY" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            # Use sudo if nixpacks/pm2 requires it
+            # Ensure bin paths are loaded
+            export PATH=$PATH:/usr/local/bin:/usr/bin
+            
+            # Build using Nixpacks (Docker will use the WARP proxy we configured)
             nixpacks build . --name ${{ github.event.repository.name }}
             
+            # Restart or Start the app
             pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
           EOF
