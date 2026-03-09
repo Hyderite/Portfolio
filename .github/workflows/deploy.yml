@@ -31,18 +31,24 @@ jobs:
           # Sync the project files to the VPS
           rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
-          # Build and Restart on the VPS
+          # Build and Restart natively on the VPS
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            # 1. Build the environment using Nixpacks
-            /usr/bin/nixpacks build . --name ${{ github.event.repository.name }}
+            # 1. Route traffic through your WARP Proxy
+            export http_proxy=http://127.0.0.1:4000
+            export https_proxy=http://127.0.0.1:4000
             
-            # 2. Restart the app using the fixed PM2 path
+            # 2. Native Build (Uses your VPS pnpm & node directly)
+            # This avoids the "no route to host" Docker error on IPv6
+            pnpm install
+            pnpm run build
+            
+            # 3. Restart the app using PM2
             # We delete first to ensure a clean start with the new build
             /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
             /usr/bin/pm2 start "pnpm start" --name ${{ github.event.repository.name }}
             
-            # 3. Save the process list for reboots
+            # 4. Save the process list for reboots
             /usr/bin/pm2 save
           EOF
