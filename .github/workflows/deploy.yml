@@ -22,16 +22,17 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          cat <<EOF > ~/.ssh/config
-          Host ${{ secrets.SSH_HOST }}
-            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --id ${{ secrets.CF_CLIENT_ID }} --secret ${{ secrets.CF_CLIENT_SECRET }}
-          EOF
+          # Define the ProxyCommand variable for reuse
+          PROXY="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }} --id ${{ secrets.CF_CLIENT_ID }} --secret ${{ secrets.CF_CLIENT_SECRET }}"
 
-          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
+          # Run rsync
+          rsync -e "ssh -o StrictHostKeyChecking=no -o ProxyCommand='$PROXY'" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          # Run SSH commands
+          ssh -o StrictHostKeyChecking=no -o ProxyCommand="$PROXY" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
+            # Use sudo if nixpacks/pm2 requires it
             nixpacks build . --name ${{ github.event.repository.name }}
             
             pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
