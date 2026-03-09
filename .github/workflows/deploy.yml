@@ -1,0 +1,19 @@
+name: Deploy App
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and Update
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /var/www/${{ github.event.repository.name }}
+            git pull origin main
+            nixpacks build . --name ${{ github.event.repository.name }}
+            pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
