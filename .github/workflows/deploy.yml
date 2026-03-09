@@ -27,7 +27,11 @@ jobs:
             ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h
           EOF
 
-          scp -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -r . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
+          # Create directory first to ensure permissions are handled
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p /var/www/${{ github.event.repository.name }}"
+
+          # Sync files excluding the heavy .git folder
+          rsync -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" -avz --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
