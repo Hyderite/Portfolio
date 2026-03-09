@@ -27,13 +27,11 @@ jobs:
             ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h
           EOF
 
-          # Create directory first to ensure permissions are handled
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p /var/www/${{ github.event.repository.name }}"
+          # Rsync the files (excluding .git) and delete anything on the VPS that isn't in GitHub
+          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
-          # Sync files excluding the heavy .git folder
-          rsync -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" -avz --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
-
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          # Remote build and restart
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
             nixpacks build . --name ${{ github.event.repository.name }}
