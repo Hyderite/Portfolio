@@ -22,16 +22,27 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
+          # Use Service Tokens to bypass the Cloudflare Access login screen
           cat <<EOF > ~/.ssh/config
           Host ${{ secrets.SSH_HOST }}
-            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_CLIENT_ID }} --service-token-secret ${{ secrets.CF_CLIENT_SECRET }}
           EOF
 
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          # Sync the project files to the VPS
+          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
+
+          # Build and Restart on the VPS
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            git pull origin main
+            # 1. Build the environment using Nixpacks
+            /usr/bin/nixpacks build . --name ${{ github.event.repository.name }}
             
-            sudo nixpacks build . --name ${{ github.event.repository.name }}
-            sudo pm2 restart ${{ github.event.repository.name }} || sudo pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
+            # 2. Restart the app using the fixed PM2 path
+            # We delete first to ensure a clean start with the new build
+            /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
+            /usr/bin/pm2 start "pnpm start" --name ${{ github.event.repository.name }}
+            
+            # 3. Save the process list for reboots
+            /usr/bin/pm2 save
           EOF
