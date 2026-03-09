@@ -1,33 +1,46 @@
-- name: Deploy via Cloudflare Tunnel
+name: Deploy App
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Cloudflared on Runner
         run: |
-          # 1. Prepare the SSH Key
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Deploy via Cloudflare Tunnel
+        run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
 
-          # 2. Define the Cloudflare Proxy Command
-          # This tells SSH to "tunnel" through Cloudflare using your Service Token
-          PROXY="cloudflared access ssh --hostname ${{ secrets.SSH_HOST }} --id ${{ secrets.CF_CLIENT_ID }} --secret ${{ secrets.CF_CLIENT_SECRET }}"
+          # Use Service Tokens to bypass the Cloudflare Access login screen
+          cat <<EOF > ~/.ssh/config
+          Host ${{ secrets.SSH_HOST }}
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_CLIENT_ID }} --service-token-secret ${{ secrets.CF_CLIENT_SECRET }}
+          EOF
 
-          # 3. Run RSYNC (Syncing the code)
-          # We use -e to pass the specific SSH command with the Proxy
-          rsync -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ProxyCommand='$PROXY'" \
-                -avz --delete --exclude '.git' . \
-                ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
+          # Sync the project files to the VPS
+          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
-          # 4. Run Build and Restart on VPS
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ProxyCommand="$PROXY" \
-              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            
-            # Ensure we are in the right directory
+          # Run the build and restart commands on the VPS
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            # Load the paths for nixpacks and pm2
-            export PATH=$PATH:/usr/local/bin:/usr/bin
+            # Use the absolute path for Nixpacks (since WARP is now helping Docker)
+            /usr/bin/nixpacks build . --name ${{ github.event.repository.name }}
             
-            # Build the app (Docker will use the WARP proxy we set up on the VPS)
-            nixpacks build . --name ${{ github.event.repository.name }}
+            # Use the absolute path for the PM2 we just moved to /usr/bin
+            /usr/bin/pm2 restart ${{ github.event.repository.name }} || /usr/bin/pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
             
-            # Restart the app
-            pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
+            # Save the PM2 list so it persists after a reboot
+            /usr/bin/pm2 save
           EOF
