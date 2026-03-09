@@ -27,13 +27,12 @@ jobs:
             ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h
           EOF
 
-          # Rsync the files (excluding .git) and delete anything on the VPS that isn't in GitHub
           rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
-          # Remote build and restart
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            nixpacks build . --name ${{ github.event.repository.name }}
+            nixpacks build . --name ${{ github.event.repository.name }} --docker-flag "--network=host"
+            
             pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
           EOF
