@@ -3,7 +3,7 @@
 
 [Insert Screenshot or Link to Live Demo here]
 
-## 🛠 Tech Stack
+## Tech Stack
 * **Runtime:** Node.js (via Nixpacks)
 * **Language:** TypeScript
 * **Styling:** PostCSS (Autoprefixer, etc.)
