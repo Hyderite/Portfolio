@@ -32,11 +32,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            # Force Nixpacks to use the host network for Docker builds
-            export NIXPACKS_DOCKER_BUILD_ARGS="--network=host"
-            
             nixpacks build . --name ${{ github.event.repository.name }}
             
-            # Restart or start the process
             pm2 restart ${{ github.event.repository.name }} || pm2 start "nixpacks run ." --name ${{ github.event.repository.name }}
           EOF
