@@ -26,10 +26,6 @@ jobs:
         run: |
           pnpm install
 
-      - name: Build
-        run: |
-          pnpm build
-
       - name: Install cloudflared
         run: |
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
@@ -53,9 +49,8 @@ jobs:
           StrictHostKeyChecking no
           EOF
 
-          ssh vps "mkdir -p /var/www/${{ github.event.repository.name }}/dist/ /var/www/${{ github.event.repository.name }}/public/dist"
+          ssh vps "mkdir -p /var/www/${{ github.event.repository.name }}/
 
-          rsync -avz -e ssh ./dist/ vps:/var/www/${{ github.event.repository.name }}/dist/
-          rsync -avz -e ssh ./public/dist/ vps:/var/www/${{ github.event.repository.name }}/public/dist/
+          rsync -avz --exclude 'node_modules' -e ssh ./ vps:/var/www/${{ github.event.repository.name }}/
 
-          ssh vps "pm2 delete ${{ github.event.repository.name }} || true && sudo fuser -k 8080/tcp || true && pm2 start /var/www/${{ github.event.repository.name }}/dist/js/index.js --name ${{ github.event.repository.name }} --update-env"
+          ssh vps "pm2 delete ${{ github.event.repository.name }} || true && sudo fuser -k 3000/tcp || true && pm2 start /var/www/${{ github.event.repository.name }}/index.js --name ${{ github.event.repository.name }} --update-env"
