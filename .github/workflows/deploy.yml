@@ -51,6 +51,12 @@ jobs:
 
           ssh vps "mkdir -p /var/www/${{ github.event.repository.name }}/"
 
-          rsync -avz --exclude 'node_modules' -e ssh ./ vps:/var/www/${{ github.event.repository.name }}/
+          rsync -avz --delete \
+            --exclude 'node_modules' \
+            --exclude 'src' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.env' \
+            -e ssh ./ vps:/var/www/${{ github.event.repository.name }}/
 
           ssh vps "pm2 delete ${{ github.event.repository.name }} || true && sudo fuser -k 3000/tcp || true && pm2 start /var/www/${{ github.event.repository.name }}/index.js --name ${{ github.event.repository.name }} --update-env"
