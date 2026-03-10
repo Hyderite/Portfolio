@@ -1,60 +1,61 @@
-name: Deploy App
+name: Node.js deployment
+
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - master
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Cloudflared on Runner
-        run: |
-          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-          chmod +x cloudflared
-          sudo mv cloudflared /usr/local/bin/
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
 
-      - name: Deploy via Cloudflare Tunnel
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+
+      - name: Build
+        run: |
+          pnpm build
+
+      - name: Install cloudflared
+        run: |
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
+      - name: Deploy
+        env:
+          CF_CLIENT_ID: ${{ secrets.CF_CLIENT_ID }}
+          CF_CLIENT_SECRET: ${{ secrets.CF_CLIENT_SECRET }}
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
           cat <<EOF > ~/.ssh/config
-          Host ${{ secrets.SSH_HOST }}
-            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_CLIENT_ID }} --service-token-secret ${{ secrets.CF_CLIENT_SECRET }}
-            StrictHostKeyChecking no
+          Host vps
+          HostName ${{ secrets.SSH_HOST }}
+          User ${{ secrets.SSH_USER }}
+          IdentityFile ~/.ssh/id_ed25519
+          ProxyCommand cloudflared access ssh --id ${{ secrets.CF_CLIENT_ID }} --secret ${{ secrets.CF_CLIENT_SECRET }} --hostname %h
+          StrictHostKeyChecking no
           EOF
 
-          # Sync project files
-          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' --exclude 'node_modules' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
+          ssh vps "mkdir -p /var/www/${{ github.event.repository.name }}/dist/ /var/www/${{ github.event.repository.name }}/public/dist"
 
-          # Build and Restart on the VPS
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            cd /var/www/${{ github.event.repository.name }}
-            
-            # 1. Clear the port
-            echo "Clearing port 8080..."
-            fuser -k 8080/tcp || true
-            
-            # 2. Install dependencies
-            echo "Installing dependencies..."
-            ~/.local/share/pnpm/pnpm install
+          rsync -avz -e ssh ./dist/ vps:/var/www/${{ github.event.repository.name }}/dist/
+          rsync -avz -e ssh ./public/dist/ vps:/var/www/${{ github.event.repository.name }}/public/dist/
 
-            # 2.5 BUILD ASSETS (This generates your CSS)
-            echo "Building assets..."
-            ~/.local/share/pnpm/pnpm run build
-            
-            # 3. Nuke the old PM2 process
-            /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
-            
-            # 4. START DIRECTLY FROM SOURCE
-            # We use the full path to npx/tsx or let pnpm handle it for consistency
-            echo "Starting from source using tsx..."
-            /usr/bin/pm2 start "~/.local/share/pnpm/pnpm exec tsx src/ts/index.ts" --name ${{ github.event.repository.name }}
-            
-            # 5. Save the process list
-            /usr/bin/pm2 save
-          EOF
+          ssh vps "pm2 delete ${{ github.event.repository.name }} || true && sudo fuser -k 8080/tcp || true && pm2 start /var/www/${{ github.event.repository.name }}/dist/js/index.js --name ${{ github.event.repository.name }} --update-env"
