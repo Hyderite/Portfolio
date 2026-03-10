@@ -68,7 +68,7 @@ jobs:
             if pm2 describe $NAME > /dev/null; then
               pm2 restart $NAME --update-env || exit 1
             else
-              pm2 start index.js --name $NAME --update-env
+              pm2 start ./index.js --name $NAME --update-env
             fi
             pm2 save
           SSH_EOF
