@@ -1,7 +1,7 @@
 name: Deploy App
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   deploy:
@@ -22,46 +22,39 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          # Setup SSH config for Cloudflare Tunnel
           cat <<EOF > ~/.ssh/config
           Host ${{ secrets.SSH_HOST }}
             ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_CLIENT_ID }} --service-token-secret ${{ secrets.CF_CLIENT_SECRET }}
             StrictHostKeyChecking no
           EOF
 
-          # Sync project files (excluding node_modules so we build fresh on VPS)
-          rsync -avz --delete --exclude '.git' --exclude 'node_modules' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
+          # Sync project files
+          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' --exclude 'node_modules' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
           # Build and Restart on the VPS
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-            set -e
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             cd /var/www/${{ github.event.repository.name }}
             
-            # 1. Use the ACTUAL proxy port we found (40000)
-            export http_proxy=http://127.0.0.1:40000
-            export https_proxy=http://127.0.0.1:40000
+            # 1. Clear the port
+            echo "Clearing port 8080..."
+            fuser -k 8080/tcp || true
             
-            # 2. Path to the pnpm we just installed to bypass symlink hell
-            PNPM_BIN="$HOME/.local/share/pnpm/pnpm"
-            
-            # 3. Build it natively (No Nixpacks)
+            # 2. Install dependencies
             echo "Installing dependencies..."
-            $PNPM_BIN install
+            ~/.local/share/pnpm/pnpm install
+
+            # 2.5 BUILD ASSETS (This generates your CSS)
+            echo "Building assets..."
+            ~/.local/share/pnpm/pnpm run build
             
-            echo "Running build..."
-            $PNPM_BIN run build || echo "No build script found, skipping..."
-            
-            # 4. Clean start with PM2
-            set +e
+            # 3. Nuke the old PM2 process
             /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
-            set -e
             
-            # Smart start: check for index.js (portfolio) or dist/index.js (aviatrak)
-            if [ -f "index.js" ]; then
-              /usr/bin/pm2 start index.js --name ${{ github.event.repository.name }}
-            else
-              /usr/bin/pm2 start dist/index.js --name ${{ github.event.repository.name }}
-            fi
+            # 4. START DIRECTLY FROM SOURCE
+            # We use the full path to npx/tsx or let pnpm handle it for consistency
+            echo "Starting from source using tsx..."
+            /usr/bin/pm2 start "~/.local/share/pnpm/pnpm exec tsx src/ts/index.ts" --name ${{ github.event.repository.name }}
             
+            # 5. Save the process list
             /usr/bin/pm2 save
           EOF
