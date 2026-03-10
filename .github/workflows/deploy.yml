@@ -22,27 +22,46 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          # Use Service Tokens to bypass the Cloudflare Access login screen
+          # Setup SSH config for Cloudflare Tunnel
           cat <<EOF > ~/.ssh/config
           Host ${{ secrets.SSH_HOST }}
             ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id ${{ secrets.CF_CLIENT_ID }} --service-token-secret ${{ secrets.CF_CLIENT_SECRET }}
+            StrictHostKeyChecking no
           EOF
 
-          # Sync the project files to the VPS
-          rsync -e "ssh -o StrictHostKeyChecking=no" -avz --delete --exclude '.git' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
+          # Sync project files (excluding node_modules so we build fresh on VPS)
+          rsync -avz --delete --exclude '.git' --exclude 'node_modules' . ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/${{ github.event.repository.name }}
 
           # Build and Restart on the VPS
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            set -e
             cd /var/www/${{ github.event.repository.name }}
             
-            # 1. Build the environment using Nixpacks
-            /usr/bin/nixpacks build . --name ${{ github.event.repository.name }}
+            # 1. Use the ACTUAL proxy port we found (40000)
+            export http_proxy=http://127.0.0.1:40000
+            export https_proxy=http://127.0.0.1:40000
             
-            # 2. Restart the app using the fixed PM2 path
-            # We delete first to ensure a clean start with the new build
+            # 2. Path to the pnpm we just installed to bypass symlink hell
+            PNPM_BIN="$HOME/.local/share/pnpm/pnpm"
+            
+            # 3. Build it natively (No Nixpacks)
+            echo "Installing dependencies..."
+            $PNPM_BIN install
+            
+            echo "Running build..."
+            $PNPM_BIN run build || echo "No build script found, skipping..."
+            
+            # 4. Clean start with PM2
+            set +e
             /usr/bin/pm2 delete ${{ github.event.repository.name }} || true
-            /usr/bin/pm2 start "pnpm start" --name ${{ github.event.repository.name }}
+            set -e
             
-            # 3. Save the process list for reboots
+            # Smart start: check for index.js (portfolio) or dist/index.js (aviatrak)
+            if [ -f "index.js" ]; then
+              /usr/bin/pm2 start index.js --name ${{ github.event.repository.name }}
+            else
+              /usr/bin/pm2 start dist/index.js --name ${{ github.event.repository.name }}
+            fi
+            
             /usr/bin/pm2 save
           EOF
