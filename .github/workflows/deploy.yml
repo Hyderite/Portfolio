@@ -59,4 +59,11 @@ jobs:
             --exclude '.env' \
             -e ssh ./ vps:/var/www/${{ github.event.repository.name }}/
 
-          ssh vps "pm2 delete ${{ github.event.repository.name }} || true && sudo fuser -k 3000/tcp || true && pm2 start /var/www/${{ github.event.repository.name }}/index.js --name ${{ github.event.repository.name }} --update-env"
+          ssh vps << SSH_EOF
+            cd /var/www/$NAME
+            pnpm install --prod --frozen-lockfile
+            pm2 describe $NAME > /dev/null \
+              && pm2 restart $NAME --update-env \
+              || pm2 start dist/js/index.js --name $NAME
+            pm2 save
+          SSH_EOF
