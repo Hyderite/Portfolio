@@ -49,7 +49,7 @@ jobs:
           StrictHostKeyChecking no
           EOF
 
-          ssh vps "mkdir -p /var/www/${{ github.event.repository.name }}/
+          ssh vps "mkdir -p /var/www/${{ github.event.repository.name }}/"
 
           rsync -avz --exclude 'node_modules' -e ssh ./ vps:/var/www/${{ github.event.repository.name }}/
 
