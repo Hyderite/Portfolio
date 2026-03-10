@@ -35,6 +35,7 @@ jobs:
         env:
           CF_CLIENT_ID: ${{ secrets.CF_CLIENT_ID }}
           CF_CLIENT_SECRET: ${{ secrets.CF_CLIENT_SECRET }}
+          NAME: ${{ github.event.repository.name }}
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
@@ -49,7 +50,7 @@ jobs:
           StrictHostKeyChecking no
           EOF
 
-          ssh vps "mkdir -p /var/www/${{ github.event.repository.name }}/"
+          ssh vps "mkdir -p /var/www/$NAME/"
 
           rsync -avz --delete \
             --exclude 'node_modules' \
@@ -60,7 +61,7 @@ jobs:
             --exclude 'README.md' \
             --exclude 'LICENSE' \
             --exclude 'cloudflared.deb' \
-            -e ssh ./ vps:/var/www/${{ github.event.repository.name }}/
+            -e ssh ./ vps:/var/www/$NAME/
 
           ssh vps << SSH_EOF
             cd /var/www/$NAME
